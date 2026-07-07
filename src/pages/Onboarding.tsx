@@ -270,41 +270,59 @@ function Step2({
       </p>
 
       <div className="step-body">
-        {/* Provider toggle */}
+        {/* Provider dropdown */}
         <div className="form-group">
-          <label className="form-label">Storage provider</label>
-          <div className="toggle-group" style={{ maxWidth: 260 }}>
-            <button
-              id="toggle-r2"
-              className={`toggle-btn ${storageType === 'r2' ? 'active' : ''}`}
-              onClick={() => { setStorageType('r2'); setResult(null); }}
-            >Cloudflare R2</button>
-            <button
-              id="toggle-s3"
-              className={`toggle-btn ${storageType === 's3' ? 'active' : ''}`}
-              onClick={() => { setStorageType('s3'); setResult(null); }}
-            >AWS S3</button>
+          <label className="form-label" htmlFor="storage-provider">Storage provider</label>
+          <select
+            id="storage-provider"
+            className="form-select"
+            value={storageType}
+            onChange={e => { setStorageType(e.target.value as StorageType); setResult(null); }}
+          >
+            <option value="r2">Cloudflare R2</option>
+            <option value="s3">AWS S3</option>
+          </select>
+        </div>
+
+        <div className="settings-row">
+          <div className="form-group">
+            <label className="form-label" htmlFor="storage-access-key">Access Key ID</label>
+            <input
+              id="storage-access-key"
+              className="form-input"
+              type="text"
+              placeholder="AKIAIOSFODNN7EXAMPLE"
+              value={creds.access_key}
+              onChange={e => update('access_key', e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="storage-secret-key">Secret Access Key</label>
+            <input
+              id="storage-secret-key"
+              className="form-input"
+              type="password"
+              placeholder="••••••••••••••••"
+              value={creds.secret_key}
+              onChange={e => update('secret_key', e.target.value)}
+            />
           </div>
         </div>
 
         <div className="settings-row">
           <div className="form-group">
-            <label className="form-label">Access Key ID</label>
-            <input id="storage-access-key" className="form-input" type="text" placeholder="AKIAIOSFODNN7EXAMPLE" value={creds.access_key} onChange={e => update('access_key', e.target.value)} />
+            <label className="form-label" htmlFor="storage-bucket">Bucket name</label>
+            <input
+              id="storage-bucket"
+              className="form-input"
+              type="text"
+              placeholder="my-backups"
+              value={creds.bucket}
+              onChange={e => update('bucket', e.target.value)}
+            />
           </div>
           <div className="form-group">
-            <label className="form-label">Secret Access Key</label>
-            <input id="storage-secret-key" className="form-input" type="password" placeholder="••••••••••••••••" value={creds.secret_key} onChange={e => update('secret_key', e.target.value)} />
-          </div>
-        </div>
-
-        <div className="settings-row">
-          <div className="form-group">
-            <label className="form-label">Bucket name</label>
-            <input id="storage-bucket" className="form-input" type="text" placeholder="my-backups" value={creds.bucket} onChange={e => update('bucket', e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Endpoint URL</label>
+            <label className="form-label" htmlFor="storage-endpoint">Endpoint URL <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({storageType === 'r2' ? 'Required' : 'Optional'})</span></label>
             <input
               id="storage-endpoint"
               className="form-input"
@@ -317,13 +335,13 @@ function Step2({
         </div>
 
         {/* Verify result */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
           <div>
             {result && (
               <div className={`connection-result ${result.success ? 'success' : 'error'}`}>
                 {result.success ? <CheckCircle size={17} /> : <XCircle size={17} />}
                 {result.success
-                  ? 'Write permissions confirmed — test object created and deleted.'
+                  ? 'Success! Write permissions verified — test object created and deleted.'
                   : result.message}
               </div>
             )}
@@ -332,7 +350,7 @@ function Step2({
             id="verify-storage-btn"
             className="btn btn-ghost"
             onClick={handleVerify}
-            disabled={testing || !creds.access_key || !creds.secret_key || !creds.bucket || !creds.endpoint}
+            disabled={testing || !creds.access_key.trim() || !creds.secret_key.trim() || !creds.bucket.trim() || !creds.endpoint.trim()}
           >
             {testing
               ? <><Loader2 size={14} style={{ animation: 'spin 0.7s linear infinite' }} /> Verifying…</>

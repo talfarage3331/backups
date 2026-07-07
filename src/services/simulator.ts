@@ -45,8 +45,8 @@ export async function testStorageConnection(credentials: {
 }): Promise<{ success: boolean; message: string }> {
   await delay(1400 + Math.random() * 600);
   const missing: string[] = [];
-  if (!credentials.access_key.trim()) missing.push('Access Key');
-  if (!credentials.secret_key.trim()) missing.push('Secret Key');
+  if (!credentials.access_key.trim()) missing.push('Access Key ID');
+  if (!credentials.secret_key.trim()) missing.push('Secret Access Key');
   if (!credentials.bucket.trim()) missing.push('Bucket Name');
   if (!credentials.endpoint.trim()) missing.push('Endpoint URL');
   if (missing.length > 0) return { success: false, message: `Missing required fields: ${missing.join(', ')}.` };
@@ -54,8 +54,15 @@ export async function testStorageConnection(credentials: {
   try { new URL(credentials.endpoint); }
   catch { return { success: false, message: 'Endpoint URL is invalid. Must be a fully qualified URL (e.g. https://...).' }; }
 
-  if (credentials.access_key.includes('fail') || credentials.access_key.length < 5) {
-    return { success: false, message: 'Access denied — write permissions check failed: Unable to put test object in bucket.' };
+  // Specific simulation checks
+  const key = credentials.access_key.toLowerCase();
+  const bucketName = credentials.bucket.toLowerCase();
+
+  if (key.includes('fail') || key.length < 10) {
+    return { success: false, message: 'Access Denied: Please check your keys' };
+  }
+  if (bucketName.includes('fail') || bucketName.length < 3) {
+    return { success: false, message: 'Bucket not found' };
   }
 
   return { success: true, message: 'Target verified successfully' };

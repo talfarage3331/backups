@@ -390,12 +390,6 @@ function Step3({
   const [retention, setRetention] = useState(14);
   const [webhook, setWebhook] = useState('');
 
-  const scheduleOptions: { value: ScheduleType; label: string; desc: string }[] = [
-    { value: 'hourly', label: 'Hourly',        desc: 'Best for high-frequency write apps' },
-    { value: '12h',    label: 'Every 12 hours', desc: 'Balanced cost and protection' },
-    { value: 'daily',  label: 'Daily',          desc: 'Recommended starting point' },
-  ];
-
   return (
     <>
       <StepTimeline step={3} />
@@ -411,48 +405,24 @@ function Step3({
       </p>
 
       <div className="step-body">
-        {/* Frequency selector */}
+        {/* Frequency selector dropdown */}
         <div className="form-group">
-          <label className="form-label">Backup frequency</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {scheduleOptions.map(opt => (
-              <label
-                key={opt.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  padding: '12px 16px',
-                  border: `1px solid ${schedule === opt.value ? 'var(--accent-blue)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius-md)',
-                  background: schedule === opt.value ? 'rgba(79,126,248,0.06)' : 'var(--bg-elevated)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="schedule"
-                  value={opt.value}
-                  checked={schedule === opt.value}
-                  onChange={() => setSchedule(opt.value)}
-                  style={{ accentColor: 'var(--accent-blue)', width: 15, height: 15 }}
-                />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{opt.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{opt.desc}</div>
-                </div>
-                {schedule === opt.value && (
-                  <CheckCircle size={16} color="var(--accent-blue)" style={{ marginLeft: 'auto' }} />
-                )}
-              </label>
-            ))}
-          </div>
+          <label className="form-label" htmlFor="backup-frequency">Backup frequency</label>
+          <select
+            id="backup-frequency"
+            className="form-select"
+            value={schedule}
+            onChange={e => setSchedule(e.target.value as ScheduleType)}
+          >
+            <option value="hourly">Hourly (Best for high-frequency write apps)</option>
+            <option value="12h">Every 12 hours (Balanced cost and protection)</option>
+            <option value="daily">Daily (Recommended starting point)</option>
+          </select>
         </div>
 
         {/* Retention */}
         <div className="form-group">
-          <label className="form-label">Retention policy</label>
+          <label className="form-label" htmlFor="retention-count">Retention policy</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Keep the last</span>
             <input
@@ -474,14 +444,14 @@ function Step3({
 
         {/* Webhook */}
         <div className="form-group">
-          <label className="form-label">
+          <label className="form-label" htmlFor="webhook-url">
             Failure webhook URL <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
           </label>
           <input
             id="webhook-url"
             className="form-input"
             type="url"
-            placeholder="https://hooks.slack.com/services/... or Discord / Telegram"
+            placeholder="e.g., https://discord.com/api/webhooks/... or Slack"
             value={webhook}
             onChange={e => setWebhook(e.target.value)}
           />
@@ -559,6 +529,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       });
 
       await seedMockRuns(pipeline.id);
+      
+      // Reset onboarding local state
+      setConnStr('');
+      setStorageCreds({ access_key: '', secret_key: '', bucket: '', endpoint: '' });
+      setStorageType('r2');
+
+      // Dispatch global toast event
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: 'Pipeline activated successfully!' }));
+
       onComplete();
     } catch (err) {
       console.error('Activation error:', err);

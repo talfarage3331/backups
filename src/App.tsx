@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CheckCircle } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -17,6 +18,7 @@ function AppShell() {
   const [view, setView] = useState<AppView>('loading');
   const [page, setPage] = useState<Page>('dashboard');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
 
   // 1. Manage auth view changes
   useEffect(() => {
@@ -46,6 +48,22 @@ function AppShell() {
     return unsubscribe;
   }, [user]);
 
+  // 3. Listen for global toast notifications
+  useEffect(() => {
+    function handleShowToast(e: Event) {
+      const customEvent = e as CustomEvent<string>;
+      const message = customEvent.detail;
+      const id = Math.random().toString();
+      setToasts(prev => [...prev, { id, message }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 3000);
+    }
+
+    window.addEventListener('show-toast', handleShowToast);
+    return () => window.removeEventListener('show-toast', handleShowToast);
+  }, []);
+
   const activeCount = pipelines.filter(p => p.status === 'active').length;
 
   const spinner = (
@@ -69,6 +87,29 @@ function AppShell() {
 
   return (
     <div className="app-shell">
+      {/* Toast Render */}
+      <div style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 10000 }}>
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className="card animate-slide-up"
+            style={{
+              padding: '12px 18px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--accent-green-border)',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 280
+            }}
+          >
+            <CheckCircle size={16} color="var(--accent-green)" />
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t.message}</span>
+          </div>
+        ))}
+      </div>
+
       <Sidebar
         activePage={page}
         onNavigate={(p) => setPage(p)}

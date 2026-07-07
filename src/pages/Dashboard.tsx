@@ -4,8 +4,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getPipelines, saveRun, subscribeToRuns } from '../services/db';
-import { runBackupSimulation } from '../services/simulator';
-import { USE_MOCK } from '../services/firebase';
 import type { Pipeline, Run } from '../types';
 
 function formatBytes(b: number): string {
@@ -263,16 +261,7 @@ export default function Dashboard() {
     });
 
     setSelectedRunId(newRun.id);
-
-    if (USE_MOCK) {
-      // Run simulation in background
-      runBackupSimulation(pipeline, newRun.id).finally(() => {
-        setRunningBackup(false);
-      });
-    } else {
-      // Production backend will update runs, disable local spinner
-      setRunningBackup(false);
-    }
+    setRunningBackup(false);
   }
 
   return (

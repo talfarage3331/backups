@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── pipelines ───────────────────────────────────────────────────────────
+    // A user may only read or write their own pipeline documents.
+    // Even though sensitive fields are encrypted, this rule provides
+    // defense-in-depth so that no other authenticated user can ever
+    // see or overwrite a pipeline row they do not own.
+    // Cloud Functions (Admin SDK) bypass these rules entirely, which is
+    // intentional: only savePipelineSecurely and executeBackup should
+    // read/write pipeline data on the server side.
+    match /pipelines/{pipelineId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == resource.data.user_id;
+
+      // Allow create when the document does not yet exist:
+      // the incoming user_id must equal the requester's uid.
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.user_id;
+    }
+
+    // ─── runs ─────────────────────────────────────────────────────────────────
+    // A user may read their own run documents. Writes are performed
+    // exclusively by Cloud Functions (Admin SDK), never from the client.
+    match /runs/{runId} {
+      allow read: if request.auth != null
+                  && request.auth.uid == resource.data.userId;
+
+      // Clients may create a run document to trigger the backup worker,
+      // but the userId in the new document must match their own auth uid.
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId;
+
+      // No client-side updates or deletes — only Admin SDK can do these.
+      allow update, delete: if false;
+    }
+
+    // ─── users ────────────────────────────────────────────────────────────────
+    // Each user can only read/write their own profile document.
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // ─── default: deny everything else ───────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

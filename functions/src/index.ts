@@ -99,7 +99,6 @@ export const executeBackup = onDocumentCreated({ document: 'runs/{runId}' }, asy
   const pipelineId = runData.pipelineId;
 
   const appendLog = async (level: 'info' | 'error' | 'success', message: string) => {
-    console.log(`[${level.toUpperCase()}] ${message}`);
     await mainDb.collection('runs').doc(runId).update({
       logs: FieldValue.arrayUnion({
         timestamp: new Date().toISOString(),
@@ -127,8 +126,9 @@ export const executeBackup = onDocumentCreated({ document: 'runs/{runId}' }, asy
       try {
         const decryptedSA = decrypt(firebase_service_account_encrypted);
         db_config = JSON.parse(decryptedSA);
-      } catch (err) {
-        console.error('Failed to decrypt or parse service account key:', err);
+      } catch {
+        // Intentionally not logging the error — it may contain key material.
+        throw new Error('Failed to decrypt service account key. Check that ENCRYPTION_SECRET_KEY matches the value used when the pipeline was saved.');
       }
     }
 

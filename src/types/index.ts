@@ -1,6 +1,6 @@
-export type DatabaseType = 'firestore' | 'rtdb';
+export type DatabaseType = 'postgres' | 'firestore' | 'rtdb';
 export type StorageType = 'r2' | 's3';
-export type ScheduleType = '12h' | 'daily' | 'weekly';
+export type ScheduleType = 'hourly' | '12h' | 'daily';
 export type RestoreCheckFrequency = 'weekly' | 'monthly' | 'off';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type RunType = 'backup' | 'restore_check';

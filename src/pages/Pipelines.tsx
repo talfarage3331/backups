@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Database, Trash2, Edit2, Plus, Loader2, CheckCircle, XCircle, Settings, HelpCircle, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { savePipeline, deletePipeline, subscribeToPipelines, seedMockRuns } from '../services/db';
 import { testDatabaseConnection, testStorageConnection } from '../services/simulator';
-import type { Pipeline, DatabaseType, StorageType, ScheduleType, RestoreCheckFrequency } from '../types';
+import type { Pipeline, StorageType, ScheduleType, RestoreCheckFrequency } from '../types';
 
 // ─── Modal confirmation for pipeline deletion ───────────────────────────────
 function DeleteConfirmModal({
@@ -42,8 +42,9 @@ function PipelineFormModal({
 
   // Form states
   const [name, setName] = useState(pipeline?.name || '');
-  const [dbType, setDbType] = useState<DatabaseType>(pipeline?.database_type || 'firestore');
-  const [dbConfig, setDbConfig] = useState(pipeline?.db_config ? JSON.stringify(pipeline.db_config, null, 2) : '');
+  const [connStr, setConnStr] = useState(
+    (pipeline?.db_config as Record<string,string> | undefined)?.connection_string || ''
+  );
   const [storageType, setStorageType] = useState<StorageType>(pipeline?.storage_type || 'r2');
   const [accessKey, setAccessKey] = useState(pipeline?.storage_credentials?.access_key || '');
   const [secretKey, setSecretKey] = useState(pipeline?.storage_credentials?.secret_key || '');
@@ -62,12 +63,11 @@ function PipelineFormModal({
   const [storageResult, setStorageResult] = useState<{ success: boolean; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleTestDb() {
     setTestingDb(true);
     setDbResult(null);
-    const r = await testDatabaseConnection(dbConfig);
+    const r = await testDatabaseConnection(connStr);
     setDbResult(r);
     setTestingDb(false);
   }
@@ -82,27 +82,13 @@ function PipelineFormModal({
     setTestingStorage(false);
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setDbConfig(ev.target?.result as string);
-    reader.readAsText(file);
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError('Please enter a pipeline name.'); return; }
-    if (!dbConfig.trim()) { setError('Please provide a database configuration.'); return; }
+    if (!connStr.trim()) { setError('Please provide a database connection string.'); return; }
     if (!accessKey || !secretKey || !bucket || !endpoint) { setError('Please complete all storage credentials.'); return; }
 
-    let parsedDbConfig: Record<string, unknown>;
-    try {
-      parsedDbConfig = JSON.parse(dbConfig);
-    } catch {
-      setError('Database configuration must be valid JSON.');
-      return;
-    }
+    const parsedDbConfig: Record<string, unknown> = { connection_string: connStr };
 
     setError('');
     setSaving(true);
@@ -112,7 +98,7 @@ function PipelineFormModal({
         id: pipeline?.id,
         name,
         user_id: userId,
-        database_type: dbType,
+        database_type: 'postgres',
         db_config: parsedDbConfig,
         storage_type: storageType,
         storage_credentials: { access_key: accessKey, secret_key: secretKey, bucket, endpoint },
@@ -169,43 +155,19 @@ function PipelineFormModal({
 
           {/* Database Setup */}
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>1. Database Source</h3>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">Database Type</label>
-              <div className="toggle-group" style={{ maxWidth: 300 }}>
-                <button
-                  type="button"
-                  className={`toggle-btn ${dbType === 'firestore' ? 'active' : ''}`}
-                  onClick={() => setDbType('firestore')}
-                >Firestore</button>
-                <button
-                  type="button"
-                  className={`toggle-btn ${dbType === 'rtdb' ? 'active' : ''}`}
-                  onClick={() => setDbType('rtdb')}
-                >Realtime Database</button>
-              </div>
-            </div>
-
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>1. Database Source (Postgres / Supabase)</h3>
             <div className="form-group">
-              <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                <label className="form-label" style={{ marginBottom: 0 }}>Configuration JSON</label>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => fileRef.current?.click()}
-                  style={{ gap: 6 }}
-                >
-                  Upload file
-                </button>
-                <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleFile} />
-              </div>
-              <textarea
-                className="form-textarea"
-                placeholder={'{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "..."\n}'}
-                value={dbConfig}
-                onChange={e => { setDbConfig(e.target.value); setDbResult(null); }}
-                required
+              <label className="form-label">Session Pooler Connection String</label>
+              <input
+                className="form-input"
+                type="password"
+                placeholder="postgresql://stackguard_backup:[pass]@[project].pooler.supabase.com:6543/postgres"
+                value={connStr}
+                onChange={e => { setConnStr(e.target.value); setDbResult(null); }}
+                autoComplete="off"
+                spellCheck={false}
               />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>Use the Session Pooler URI from Supabase → Settings → Database (port 6543).</div>
             </div>
 
             <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
@@ -219,10 +181,10 @@ function PipelineFormModal({
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={handleTestDb}
-                disabled={testingDb || !dbConfig}
+                disabled={testingDb || !connStr}
                 style={{ marginLeft: 'auto' }}
               >
-                {testingDb ? 'Testing...' : 'Test Database Connection'}
+                {testingDb ? 'Testing...' : 'Test Connection'}
               </button>
             </div>
           </div>
@@ -298,9 +260,9 @@ function PipelineFormModal({
               <div className="form-group">
                 <label className="form-label">Backup Frequency</label>
                 <select className="form-select" value={schedule} onChange={e => setSchedule(e.target.value as ScheduleType)}>
+                  <option value="hourly">Hourly</option>
                   <option value="12h">Every 12 hours</option>
                   <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
                 </select>
               </div>
               <div className="form-group">
@@ -440,9 +402,9 @@ export default function Pipelines() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           {pipelines.map((pipeline) => {
             const isPipelineActive = pipeline.status === 'active';
-            const dbLabel = pipeline.database_type === 'firestore' ? 'Firestore' : 'Realtime DB';
+            const dbLabel = pipeline.database_type === 'postgres' ? 'PostgreSQL' : pipeline.database_type === 'firestore' ? 'Firestore' : 'Realtime DB';
             const storageLabel = pipeline.storage_type === 'r2' ? 'Cloudflare R2' : 'AWS S3';
-            const scheduleSummary = pipeline.schedule === '12h' ? 'Every 12 Hours' : pipeline.schedule === 'daily' ? 'Daily' : 'Weekly';
+            const scheduleSummary = pipeline.schedule === 'hourly' ? 'Hourly' : pipeline.schedule === '12h' ? 'Every 12 Hours' : 'Daily';
 
             return (
               <div key={pipeline.id} className="card flex items-center justify-between" style={{ padding: 'var(--space-5) var(--space-6)' }}>

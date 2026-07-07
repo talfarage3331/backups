@@ -7,42 +7,43 @@ function delay(ms: number) {
 
 // ─── Connection validation ────────────────────────────────────────────────────
 
-function isValidFirebaseConfig(json: Record<string, unknown>): boolean {
-  return ['apiKey', 'authDomain', 'projectId'].every(
-    (k) => typeof json[k] === 'string' && (json[k] as string).length > 0
-  );
-}
-
-function isValidServiceAccount(json: Record<string, unknown>): boolean {
-  return ['type', 'project_id', 'private_key', 'client_email'].every(
-    (k) => typeof json[k] === 'string' && (json[k] as string).length > 0
-  );
-}
-
 export async function testDatabaseConnection(
-  configText: string
+  connectionString: string
 ): Promise<{ success: boolean; message: string }> {
-  await delay(1400 + Math.random() * 600);
-  if (!configText.trim())
-    return { success: false, message: 'Configuration is empty. Please paste your Firebase config or Service Account JSON.' };
+  await delay(1200 + Math.random() * 600);
 
-  let parsed: Record<string, unknown>;
-  try { parsed = JSON.parse(configText); }
-  catch { return { success: false, message: 'Invalid JSON. Please check your configuration for syntax errors.' }; }
+  if (!connectionString.trim()) {
+    return { success: false, message: 'Connection string is empty.' };
+  }
 
-  if (isValidFirebaseConfig(parsed) || isValidServiceAccount(parsed))
-    return { success: true, message: 'Connection successful' };
+  const cleanString = connectionString.trim();
 
-  const missing = ['apiKey', 'authDomain', 'projectId'].filter((k) => !parsed[k]);
-  if (missing.length < 3)
-    return { success: false, message: `Firebase config incomplete. Missing: ${missing.join(', ')}.` };
-  return { success: false, message: 'Unrecognized format. Provide a Firebase Config JSON or a Service Account JSON.' };
+  if (!cleanString.startsWith('postgresql://') && !cleanString.startsWith('postgres://')) {
+    return {
+      success: false,
+      message: 'Invalid protocol. Connection string must start with "postgresql://" or "postgres://".'
+    };
+  }
+
+  // Detect direct connection instead of Session Pooler
+  const isSupabase = cleanString.includes('supabase');
+  const isDirectPort = cleanString.includes(':5432');
+  const isMissingPooler = !cleanString.includes('pooler');
+
+  if (isSupabase && (isDirectPort || isMissingPooler)) {
+    return {
+      success: false,
+      message: 'Connection failed: Supabase direct connection detected on port 5432. Many serverless environments and local ISPs block IPv6 direct database routes. We recommend using a Session Pooler connection string (port 6543 or containing *.pooler.supabase.com) to establish a stable IPv4 tunnel.'
+    };
+  }
+
+  return { success: true, message: 'Connection successful' };
 }
 
 export async function testStorageConnection(credentials: {
   access_key: string; secret_key: string; bucket: string; endpoint: string;
 }): Promise<{ success: boolean; message: string }> {
-  await delay(1600 + Math.random() * 800);
+  await delay(1400 + Math.random() * 600);
   const missing: string[] = [];
   if (!credentials.access_key.trim()) missing.push('Access Key');
   if (!credentials.secret_key.trim()) missing.push('Secret Key');
@@ -53,13 +54,14 @@ export async function testStorageConnection(credentials: {
   try { new URL(credentials.endpoint); }
   catch { return { success: false, message: 'Endpoint URL is invalid. Must be a fully qualified URL (e.g. https://...).' }; }
 
-  if (credentials.access_key === 'fail')
-    return { success: false, message: 'Access denied — invalid credentials or bucket permissions.' };
+  if (credentials.access_key.includes('fail') || credentials.access_key.length < 5) {
+    return { success: false, message: 'Access denied — write permissions check failed: Unable to put test object in bucket.' };
+  }
 
   return { success: true, message: 'Target verified successfully' };
 }
 
-// ─── Backup simulation ────────────────────────────────────────────────────────
+// ─── Backup simulation (mock only) ────────────────────────────────────────────
 
 function isMockCredential(accessKey: string): boolean {
   return (
@@ -84,8 +86,8 @@ export async function runBackupSimulation(
     });
   };
 
-  await addLog('info',  'Connecting to Firestore database...',                2000);
-  await addLog('info',  'Fetching collections and exporting documents...',    2000);
+  await addLog('info',  'Connecting to database...',                            2000);
+  await addLog('info',  'Fetching schema and exporting tables...',              2000);
   await addLog('info',  'Compressing backup archive (tar.gz)...',             2000);
   await addLog('info',  'Connecting to Cloudflare R2 storage target...',      2000);
 

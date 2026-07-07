@@ -942,6 +942,170 @@ button {
   gap: var(--space-3);
 }
 
+/* ── Step timeline nodes ─────────────────────────────────────────────────── */
+.step-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--space-8);
+  position: relative;
+}
+
+.step-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+}
+
+.step-node-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  transition: all 0.25s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.step-node.done .step-node-circle {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+
+.step-node.active .step-node-circle {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(79,126,248,0.18);
+}
+
+.step-node-label {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 6px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.step-node.done .step-node-label,
+.step-node.active .step-node-label {
+  color: var(--accent-blue);
+}
+
+.step-node-line {
+  flex: 1;
+  height: 2px;
+  background: var(--bg-elevated);
+  margin-bottom: 18px;
+  transition: background 0.3s;
+}
+
+.step-node-line.done {
+  background: var(--accent-blue);
+}
+
+/* ── SQL snippet block ───────────────────────────────────────────────────── */
+.sql-block {
+  background: #07090f;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.sql-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #0f1119;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.sql-block-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sql-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.02em;
+}
+.sql-copy-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+.sql-copy-btn.copied { color: var(--accent-green); border-color: var(--accent-green); }
+
+.sql-block-body {
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #9aa5bf;
+  white-space: pre;
+}
+
+.sql-block-body .sql-keyword { color: #7ca4e6; }
+.sql-block-body .sql-string  { color: #b8e09a; }
+.sql-block-body .sql-comment { color: #3d4f6a; font-style: italic; }
+
+/* ── Diagnostic warning box ─────────────────────────────────────────────── */
+.diagnostic-box {
+  background: rgba(248,180,80,0.06);
+  border: 1px solid rgba(248,180,80,0.22);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  font-size: 13px;
+  color: #d6a93c;
+  line-height: 1.6;
+  display: flex;
+  gap: 10px;
+}
+
+.diagnostic-box-icon { flex-shrink: 0; padding-top: 1px; }
+
+/* ── Copy toast ─────────────────────────────────────────────────────────── */
+.copy-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-green-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-green);
+  box-shadow: var(--shadow-lg);
+  animation: fadeSlideUp 0.25s ease;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+
 /* ═══════════════════════════════════════════════════════════
    DASHBOARD
 ═══════════════════════════════════════════════════════════ */

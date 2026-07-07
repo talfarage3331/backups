@@ -1,138 +1,178 @@
-import { useState, useRef } from 'react';
-import { CheckCircle, XCircle, Lock, Upload, HelpCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import {
+  CheckCircle, XCircle, ArrowRight, Loader2, Copy, Check, AlertTriangle, Shield, Database, Cloud, Clock
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { testDatabaseConnection, testStorageConnection } from '../services/simulator';
 import { savePipeline, seedMockRuns } from '../services/db';
-import type { Pipeline } from '../types';
+import type { Pipeline, ScheduleType } from '../types';
 
-type DBType = 'firestore' | 'rtdb';
 type StorageType = 'r2' | 's3';
 
 interface OnboardingProps {
   onComplete: () => void;
 }
 
-function ProgressBar({ step }: { step: number }) {
+// ─── Timeline progress header ─────────────────────────────────────────────────
+
+function StepTimeline({ step }: { step: number }) {
+  const steps = [
+    { num: 1, label: 'Database' },
+    { num: 2, label: 'Storage' },
+    { num: 3, label: 'Schedule' },
+  ];
+
   return (
-    <div className="progress-bar-row">
-      {[1, 2, 3].map((s) => (
-        <div key={s} className="progress-segment">
-          <div
-            className={`progress-segment-fill ${s < step ? 'done' : s === step ? 'active' : 'idle'}`}
-          />
-        </div>
-      ))}
+    <div className="step-timeline">
+      {steps.map((s, i) => {
+        const state = s.num < step ? 'done' : s.num === step ? 'active' : 'idle';
+        return (
+          <>
+            <div key={s.num} className={`step-node ${state}`}>
+              <div className="step-node-circle">
+                {state === 'done' ? <Check size={14} /> : s.num}
+              </div>
+              <span className="step-node-label">{s.label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div key={`line-${i}`} className={`step-node-line ${s.num < step ? 'done' : ''}`} />
+            )}
+          </>
+        );
+      })}
     </div>
   );
 }
 
-// ─── Step 1: Database ────────────────────────────────────────────────────────
+// ─── SQL copy block ───────────────────────────────────────────────────────────
 
-function Step1({
-  onNext,
-  dbType,
-  setDbType,
-  dbConfig,
-  setDbConfig,
-}: {
-  onNext: (config: string, type: DBType) => void;
-  dbType: DBType;
-  setDbType: (t: DBType) => void;
-  dbConfig: string;
-  setDbConfig: (v: string) => void;
-}) {
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+const SQL_SNIPPET = `-- Run these 3 lines in your Supabase SQL Editor
+CREATE ROLE stackguard_backup WITH LOGIN PASSWORD 'choose-a-strong-password';
+GRANT CONNECT ON DATABASE postgres TO stackguard_backup;
+GRANT USAGE ON SCHEMA public TO stackguard_backup;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO stackguard_backup;`;
 
-  async function handleTest() {
-    setTesting(true);
-    setResult(null);
-    const r = await testDatabaseConnection(dbConfig);
-    setResult(r);
-    setTesting(false);
-  }
+function SqlBlock() {
+  const [copied, setCopied] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setDbConfig(ev.target?.result as string);
-    reader.readAsText(file);
+  function handleCopy() {
+    navigator.clipboard.writeText(SQL_SNIPPET).then(() => {
+      setCopied(true);
+      setShowToast(true);
+      setTimeout(() => { setCopied(false); setShowToast(false); }, 2500);
+    });
   }
 
   return (
     <>
-      <ProgressBar step={1} />
-      <p className="progress-label">Step <strong>1</strong> of 3 — connect your database</p>
+      <div className="sql-block">
+        <div className="sql-block-header">
+          <span className="sql-block-title">SQL — run in Supabase SQL Editor</span>
+          <button className={`sql-copy-btn ${copied ? 'copied' : ''}`} onClick={handleCopy}>
+            {copied ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy</>}
+          </button>
+        </div>
+        <div className="sql-block-body">
+          <span className="sql-comment">{'-- Run these 3 lines in your Supabase SQL Editor\n'}</span>
+          <span><span className="sql-keyword">CREATE ROLE</span> stackguard_backup <span className="sql-keyword">WITH LOGIN PASSWORD</span> <span className="sql-string">'choose-a-strong-password'</span>;<br /></span>
+          <span><span className="sql-keyword">GRANT CONNECT ON DATABASE</span> postgres <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
+          <span><span className="sql-keyword">GRANT USAGE ON SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
+          <span><span className="sql-keyword">GRANT SELECT ON ALL TABLES IN SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;</span>
+        </div>
+      </div>
+      {showToast && (
+        <div className="copy-toast">
+          <CheckCircle size={14} /> SQL copied to clipboard
+        </div>
+      )}
+    </>
+  );
+}
 
-      <h1 className="step-title">Connect your database</h1>
+// ─── Step 1: Database ─────────────────────────────────────────────────────────
+
+function Step1({
+  onNext, connStr, setConnStr,
+}: {
+  onNext: (connStr: string) => void;
+  connStr: string;
+  setConnStr: (v: string) => void;
+}) {
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const isPoolerWarning = result && !result.success && result.message.includes('Session Pooler');
+
+  async function handleTest() {
+    setTesting(true);
+    setResult(null);
+    const r = await testDatabaseConnection(connStr);
+    setResult(r);
+    setTesting(false);
+  }
+
+  return (
+    <>
+      <StepTimeline step={1} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-2)' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'rgba(79,126,248,0.1)', border: '1px solid rgba(79,126,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Database size={18} color="var(--accent-blue)" />
+        </div>
+        <h1 className="step-title" style={{ marginBottom: 0 }}>Connect your database</h1>
+      </div>
       <p className="step-subtitle">
-        Paste your Firebase config JSON or upload your Service Account key — we'll read the data, never write it.
+        We connect with a read-only role — StackGuard never writes to your data.
       </p>
 
       <div className="step-body">
-        {/* DB type toggle */}
-        <div className="form-group">
-          <label className="form-label">Database type</label>
-          <div className="toggle-group" style={{ maxWidth: 300 }}>
-            <button
-              id="toggle-firestore"
-              className={`toggle-btn ${dbType === 'firestore' ? 'active' : ''}`}
-              onClick={() => { setDbType('firestore'); setResult(null); }}
-            >Firestore</button>
-            <button
-              id="toggle-rtdb"
-              className={`toggle-btn ${dbType === 'rtdb' ? 'active' : ''}`}
-              onClick={() => { setDbType('rtdb'); setResult(null); }}
-            >Realtime Database</button>
-          </div>
+        {/* SQL instructions */}
+        <div>
+          <label className="form-label" style={{ marginBottom: 8 }}>
+            Step 1 of 2 — Create a read-only user in Supabase
+          </label>
+          <SqlBlock />
         </div>
 
-        {/* Config JSON */}
+        {/* Connection string */}
         <div className="form-group">
-          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-            <label className="form-label" style={{ marginBottom: 0 }}>
-              {dbType === 'firestore' ? 'Firebase Config JSON or Service Account key' : 'Firebase Config JSON'}
-            </label>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => fileRef.current?.click()}
-              style={{ gap: 6 }}
-            >
-              <Upload size={13} /> Upload file
-            </button>
-            <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleFile} />
-          </div>
-          <textarea
-            id="db-config-textarea"
-            className="form-textarea"
-            placeholder={'{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "..."\n}'}
-            value={dbConfig}
-            onChange={e => { setDbConfig(e.target.value); setResult(null); }}
+          <label className="form-label">
+            Step 2 of 2 — Paste the Session Pooler connection string
+          </label>
+          <input
+            id="db-connection-string"
+            className="form-input"
+            type="password"
+            placeholder="postgresql://stackguard_backup:[password]@[project].pooler.supabase.com:6543/postgres"
+            value={connStr}
+            onChange={e => { setConnStr(e.target.value); setResult(null); }}
+            autoComplete="off"
+            spellCheck={false}
           />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Shield size={11} />
+            Use the <strong style={{ color: 'var(--text-secondary)' }}>Session Pooler</strong> connection (port 6543) for maximum compatibility — find it in Supabase → Settings → Database → Connection string.
+          </div>
         </div>
 
-        {/* Hint box */}
-        <div className="info-box">
-          <div className="info-box-header">
-            <Lock size={14} />
-            Read-only access recommended
+        {/* Warning box shown when pooler detection fails */}
+        {isPoolerWarning && (
+          <div className="diagnostic-box">
+            <div className="diagnostic-box-icon"><AlertTriangle size={15} /></div>
+            <div>
+              <strong>IPv6 / Direct Connection Detected</strong><br />
+              Your connection string points to port 5432 (direct connection). Many cloud platforms and ISPs block direct IPv6 Postgres connections.<br /><br />
+              <strong>Fix:</strong> In your Supabase dashboard, go to <em>Settings → Database → Connection string</em> and copy the <strong>Session Pooler</strong> URI (port 6543, containing <code>pooler.supabase.com</code>).
+            </div>
           </div>
-          <div className="code-block">
-            For Service Accounts, grant only the <span>Cloud Datastore Viewer</span> or{' '}
-            <span>Firebase Viewer</span> IAM role — StackGuard never modifies your data.
-          </div>
-        </div>
+        )}
 
         {/* Result */}
         <div className="flex items-center justify-between">
           <div>
-            {result && (
+            {result && !isPoolerWarning && (
               <div className={`connection-result ${result.success ? 'success' : 'error'}`}>
-                {result.success
-                  ? <CheckCircle size={18} />
-                  : <XCircle size={18} />}
+                {result.success ? <CheckCircle size={17} /> : <XCircle size={17} />}
                 {result.message}
               </div>
             )}
@@ -141,9 +181,11 @@ function Step1({
             id="test-db-connection-btn"
             className="btn btn-ghost"
             onClick={handleTest}
-            disabled={testing}
+            disabled={testing || !connStr.trim()}
           >
-            {testing ? <><Loader2 size={15} className="animate-spin" style={{ animation: 'spin 0.7s linear infinite' }} /> Testing…</> : 'Test connection'}
+            {testing
+              ? <><Loader2 size={14} style={{ animation: 'spin 0.7s linear infinite' }} /> Testing…</>
+              : 'Test connection'}
           </button>
         </div>
       </div>
@@ -154,7 +196,7 @@ function Step1({
           <button
             id="step1-continue-btn"
             className="btn btn-dark"
-            onClick={() => onNext(dbConfig, dbType)}
+            onClick={() => onNext(connStr)}
             disabled={!result?.success}
           >
             Continue <ArrowRight size={15} />
@@ -165,15 +207,10 @@ function Step1({
   );
 }
 
-// ─── Step 2: Storage ─────────────────────────────────────────────────────────
+// ─── Step 2: Storage ──────────────────────────────────────────────────────────
 
 function Step2({
-  onNext,
-  onBack,
-  storageType,
-  setStorageType,
-  creds,
-  setCreds,
+  onNext, onBack, storageType, setStorageType, creds, setCreds,
 }: {
   onNext: (creds: Pipeline['storage_credentials'], type: StorageType) => void;
   onBack: () => void;
@@ -198,18 +235,26 @@ function Step2({
     setTesting(false);
   }
 
+  const placeholderEndpoint = storageType === 'r2'
+    ? 'https://<account-id>.r2.cloudflarestorage.com'
+    : 'https://s3.us-east-1.amazonaws.com';
+
   return (
     <>
-      <ProgressBar step={2} />
-      <p className="progress-label">Step <strong>2</strong> of 3 — connect storage</p>
+      <StepTimeline step={2} />
 
-      <h1 className="step-title">Connect storage</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-2)' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'rgba(79,126,248,0.1)', border: '1px solid rgba(79,126,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Cloud size={18} color="var(--accent-blue)" />
+        </div>
+        <h1 className="step-title" style={{ marginBottom: 0 }}>Storage destination</h1>
+      </div>
       <p className="step-subtitle">
-        Backup archives will be written to your own bucket — you keep full ownership.
+        Backup archives are written to your own bucket — you retain full ownership.
       </p>
 
       <div className="step-body">
-        {/* Storage type toggle */}
+        {/* Provider toggle */}
         <div className="form-group">
           <label className="form-label">Storage provider</label>
           <div className="toggle-group" style={{ maxWidth: 260 }}>
@@ -240,7 +285,7 @@ function Step2({
         <div className="settings-row">
           <div className="form-group">
             <label className="form-label">Bucket name</label>
-            <input id="storage-bucket" className="form-input" type="text" placeholder="my-backups-bucket" value={creds.bucket} onChange={e => update('bucket', e.target.value)} />
+            <input id="storage-bucket" className="form-input" type="text" placeholder="my-backups" value={creds.bucket} onChange={e => update('bucket', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">Endpoint URL</label>
@@ -248,20 +293,22 @@ function Step2({
               id="storage-endpoint"
               className="form-input"
               type="url"
-              placeholder={storageType === 'r2' ? 'https://<account-id>.r2.cloudflarestorage.com' : 'https://s3.amazonaws.com'}
+              placeholder={placeholderEndpoint}
               value={creds.endpoint}
               onChange={e => update('endpoint', e.target.value)}
             />
           </div>
         </div>
 
-        {/* Result */}
+        {/* Verify result */}
         <div className="flex items-center justify-between">
           <div>
             {result && (
               <div className={`connection-result ${result.success ? 'success' : 'error'}`}>
-                {result.success ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                {result.message}
+                {result.success ? <CheckCircle size={17} /> : <XCircle size={17} />}
+                {result.success
+                  ? 'Write permissions confirmed — test object created and deleted.'
+                  : result.message}
               </div>
             )}
           </div>
@@ -269,9 +316,11 @@ function Step2({
             id="verify-storage-btn"
             className="btn btn-ghost"
             onClick={handleVerify}
-            disabled={testing}
+            disabled={testing || !creds.access_key || !creds.secret_key || !creds.bucket || !creds.endpoint}
           >
-            {testing ? <><Loader2 size={15} style={{ animation: 'spin 0.7s linear infinite' }} /> Verifying…</> : 'Verify target'}
+            {testing
+              ? <><Loader2 size={14} style={{ animation: 'spin 0.7s linear infinite' }} /> Verifying…</>
+              : 'Verify target'}
           </button>
         </div>
       </div>
@@ -294,46 +343,84 @@ function Step2({
   );
 }
 
-// ─── Step 3: Schedule & Notifications ────────────────────────────────────────
+// ─── Step 3: Schedule & Alerts ────────────────────────────────────────────────
 
 function Step3({
-  onActivate,
-  onBack,
-  loading,
+  onActivate, onBack, loading,
 }: {
-  onActivate: (data: { schedule: string; retention: number; restoreFreq: string; webhook: string; notifyOnFailOnly: boolean }) => void;
+  onActivate: (data: { schedule: ScheduleType; retention: number; webhook: string }) => void;
   onBack: () => void;
   loading: boolean;
 }) {
-  const [schedule, setSchedule] = useState('daily');
+  const [schedule, setSchedule] = useState<ScheduleType>('daily');
   const [retention, setRetention] = useState(14);
-  const [restoreFreq, setRestoreFreq] = useState('weekly');
   const [webhook, setWebhook] = useState('');
-  const [notifyOnFailOnly, setNotifyOnFailOnly] = useState(true);
+
+  const scheduleOptions: { value: ScheduleType; label: string; desc: string }[] = [
+    { value: 'hourly', label: 'Hourly',        desc: 'Best for high-frequency write apps' },
+    { value: '12h',    label: 'Every 12 hours', desc: 'Balanced cost and protection' },
+    { value: 'daily',  label: 'Daily',          desc: 'Recommended starting point' },
+  ];
 
   return (
     <>
-      <ProgressBar step={3} />
-      <p className="progress-label">Step <strong>3</strong> of 3 — schedule &amp; notifications</p>
+      <StepTimeline step={3} />
 
-      <h1 className="step-title">Schedule &amp; notifications</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-2)' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'rgba(79,126,248,0.1)', border: '1px solid rgba(79,126,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Clock size={18} color="var(--accent-blue)" />
+        </div>
+        <h1 className="step-title" style={{ marginBottom: 0 }}>Schedule &amp; alerts</h1>
+      </div>
       <p className="step-subtitle">
-        Configure when backups run and how you want to be alerted.
+        Configure how often backups run and where you receive failure notifications.
       </p>
 
       <div className="step-body">
-        <div className="settings-row">
-          <div className="form-group">
-            <label className="form-label">Backup frequency</label>
-            <select id="backup-frequency" className="form-select" value={schedule} onChange={e => setSchedule(e.target.value)}>
-              <option value="12h">Every 12 hours</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
+        {/* Frequency selector */}
+        <div className="form-group">
+          <label className="form-label">Backup frequency</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {scheduleOptions.map(opt => (
+              <label
+                key={opt.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  padding: '12px 16px',
+                  border: `1px solid ${schedule === opt.value ? 'var(--accent-blue)' : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-md)',
+                  background: schedule === opt.value ? 'rgba(79,126,248,0.06)' : 'var(--bg-elevated)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <input
+                  type="radio"
+                  name="schedule"
+                  value={opt.value}
+                  checked={schedule === opt.value}
+                  onChange={() => setSchedule(opt.value)}
+                  style={{ accentColor: 'var(--accent-blue)', width: 15, height: 15 }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{opt.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{opt.desc}</div>
+                </div>
+                {schedule === opt.value && (
+                  <CheckCircle size={16} color="var(--accent-blue)" style={{ marginLeft: 'auto' }} />
+                )}
+              </label>
+            ))}
           </div>
+        </div>
 
-          <div className="form-group">
-            <label className="form-label">Retention — keep last N backups</label>
+        {/* Retention */}
+        <div className="form-group">
+          <label className="form-label">Retention policy</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Keep the last</span>
             <input
               id="retention-count"
               className="form-number"
@@ -341,51 +428,33 @@ function Step3({
               min={1}
               max={365}
               value={retention}
-              onChange={e => setRetention(Number(e.target.value))}
+              onChange={e => setRetention(Math.max(1, Number(e.target.value)))}
+              style={{ width: 80 }}
             />
+            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>backups</span>
           </div>
-        </div>
-
-        {/* Restore check */}
-        <div className="form-group">
-          <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-            <label className="form-label" style={{ marginBottom: 0 }}>Restore check frequency</label>
-            <div className="tooltip-wrapper">
-              <HelpCircle size={14} style={{ color: 'var(--text-muted)', cursor: 'help' }} />
-              <span className="tooltip-text">
-                We restore your latest backup into a sandbox and verify it's recoverable — not just that a file exists.
-              </span>
-            </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+            Older backups are automatically deleted. Default is 14.
           </div>
-          <select id="restore-frequency" className="form-select" value={restoreFreq} onChange={e => setRestoreFreq(e.target.value)}>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="off">Off</option>
-          </select>
         </div>
 
         {/* Webhook */}
         <div className="form-group">
-          <label className="form-label">Webhook URL <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Discord / Telegram / Slack)</span></label>
+          <label className="form-label">
+            Failure webhook URL <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+          </label>
           <input
             id="webhook-url"
             className="form-input"
             type="url"
-            placeholder="https://hooks.slack.com/services/..."
+            placeholder="https://hooks.slack.com/services/... or Discord / Telegram"
             value={webhook}
             onChange={e => setWebhook(e.target.value)}
           />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+            Sends an alert if a backup job fails. Compatible with Slack, Discord, and Telegram webhooks.
+          </div>
         </div>
-
-        <label className="checkbox-label">
-          <input
-            id="notify-fail-only"
-            type="checkbox"
-            checked={notifyOnFailOnly}
-            onChange={e => setNotifyOnFailOnly(e.target.checked)}
-          />
-          Only notify on failure
-        </label>
       </div>
 
       <div className="step-footer">
@@ -395,10 +464,13 @@ function Step3({
           <button
             id="activate-pipeline-btn"
             className="btn btn-dark btn-lg"
-            onClick={() => onActivate({ schedule, retention, restoreFreq, webhook, notifyOnFailOnly })}
+            style={{ gap: 8 }}
+            onClick={() => onActivate({ schedule, retention, webhook })}
             disabled={loading}
           >
-            {loading ? <><span className="spinner" /> Activating…</> : '🚀 Activate pipeline'}
+            {loading
+              ? <><Loader2 size={15} style={{ animation: 'spin 0.7s linear infinite' }} /> Activating…</>
+              : <><CheckCircle size={15} /> Activate pipeline</>}
           </button>
         </div>
       </div>
@@ -406,7 +478,7 @@ function Step3({
   );
 }
 
-// ─── Onboarding Shell ────────────────────────────────────────────────────────
+// ─── Onboarding Shell ─────────────────────────────────────────────────────────
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const { user } = useAuth();
@@ -414,16 +486,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [activating, setActivating] = useState(false);
 
   // State carried through steps
-  const [dbType, setDbType] = useState<DBType>('firestore');
-  const [dbConfig, setDbConfig] = useState('');
+  const [connStr, setConnStr] = useState('');
   const [storageType, setStorageType] = useState<StorageType>('r2');
   const [storageCreds, setStorageCreds] = useState<Pipeline['storage_credentials']>({
     access_key: '', secret_key: '', bucket: '', endpoint: '',
   });
 
-  function handleStep1Next(config: string, type: DBType) {
-    setDbConfig(config);
-    setDbType(type);
+  function handleStep1Next(cs: string) {
+    setConnStr(cs);
     setStep(2);
   }
 
@@ -433,34 +503,34 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setStep(3);
   }
 
-  async function handleActivate(data: {
-    schedule: string;
-    retention: number;
-    restoreFreq: string;
-    webhook: string;
-    notifyOnFailOnly: boolean;
-  }) {
+  async function handleActivate(data: { schedule: ScheduleType; retention: number; webhook: string }) {
     if (!user) return;
     setActivating(true);
 
-    const pipeline = await savePipeline({
-      user_id: user.uid,
-      database_type: dbType,
-      db_config: JSON.parse(dbConfig),
-      storage_type: storageType,
-      storage_credentials: storageCreds,
-      schedule: data.schedule as Pipeline['schedule'],
-      retention_count: data.retention,
-      restore_check_frequency: data.restoreFreq as Pipeline['restore_check_frequency'],
-      webhook_url: data.webhook,
-      notify_on_success_too: !data.notifyOnFailOnly,
-      created_at: new Date().toISOString(),
-      status: 'active',
-    });
+    try {
+      const pipeline = await savePipeline({
+        name: `${storageType === 'r2' ? 'R2' : 'S3'} Backup (${data.schedule})`,
+        user_id: user.uid,
+        database_type: 'postgres',
+        db_config: { connection_string: connStr },
+        storage_type: storageType,
+        storage_credentials: storageCreds,
+        schedule: data.schedule,
+        retention_count: data.retention,
+        restore_check_frequency: 'weekly',
+        webhook_url: data.webhook,
+        notify_on_success_too: false,
+        created_at: new Date().toISOString(),
+        status: 'active',
+      });
 
-    await seedMockRuns(pipeline.id);
-    setActivating(false);
-    onComplete();
+      await seedMockRuns(pipeline.id);
+      onComplete();
+    } catch (err) {
+      console.error('Activation error:', err);
+    } finally {
+      setActivating(false);
+    }
   }
 
   return (
@@ -470,10 +540,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <Step1
             key="step1"
             onNext={handleStep1Next}
-            dbType={dbType}
-            setDbType={setDbType}
-            dbConfig={dbConfig}
-            setDbConfig={setDbConfig}
+            connStr={connStr}
+            setConnStr={setConnStr}
           />
         )}
         {step === 2 && (

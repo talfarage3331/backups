@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CheckCircle, XCircle, ArrowRight, Loader2, Copy, Check, AlertTriangle, Shield, Database, Cloud, Clock
+  CheckCircle, XCircle, ArrowRight, Loader2, Check, AlertTriangle, Shield, Database, Cloud, Clock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { testDatabaseConnection, testStorageConnection } from '../services/simulator';
@@ -44,73 +44,43 @@ function StepTimeline({ step }: { step: number }) {
   );
 }
 
-// ─── SQL copy block ───────────────────────────────────────────────────────────
-
-const SQL_SNIPPET = `-- Run these 5 lines in your Supabase SQL Editor
-CREATE ROLE stackguard_backup WITH LOGIN PASSWORD 'choose-a-strong-password';
-GRANT CONNECT ON DATABASE postgres TO stackguard_backup;
-GRANT USAGE ON SCHEMA public TO stackguard_backup;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO stackguard_backup;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO stackguard_backup;`;
-
-function SqlBlock() {
-  const [copied, setCopied] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(SQL_SNIPPET).then(() => {
-      setCopied(true);
-      setShowToast(true);
-      setTimeout(() => { setCopied(false); setShowToast(false); }, 2500);
-    });
-  }
-
-  return (
-    <>
-      <div className="sql-block">
-        <div className="sql-block-header">
-          <span className="sql-block-title">SQL — run in Supabase SQL Editor</span>
-          <button className={`sql-copy-btn ${copied ? 'copied' : ''}`} onClick={handleCopy}>
-            {copied ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy</>}
-          </button>
-        </div>
-        <div className="sql-block-body">
-          <span className="sql-comment">{'-- Run these 5 lines in your Supabase SQL Editor\n'}</span>
-          <span><span className="sql-keyword">CREATE ROLE</span> stackguard_backup <span className="sql-keyword">WITH LOGIN PASSWORD</span> <span className="sql-string">'choose-a-strong-password'</span>;<br /></span>
-          <span><span className="sql-keyword">GRANT CONNECT ON DATABASE</span> postgres <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
-          <span><span className="sql-keyword">GRANT USAGE ON SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
-          <span><span className="sql-keyword">GRANT SELECT ON ALL TABLES IN SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
-          <span><span className="sql-keyword">ALTER DEFAULT PRIVILEGES IN SCHEMA</span> public <span className="sql-keyword">GRANT SELECT ON TABLES TO</span> stackguard_backup;</span>
-        </div>
-      </div>
-      {showToast && (
-        <div className="copy-toast">
-          <CheckCircle size={14} /> SQL copied to clipboard
-        </div>
-      )}
-    </>
-  );
-}
-
 // ─── Step 1: Database ─────────────────────────────────────────────────────────
 
 function Step1({
-  onNext, connStr, setConnStr,
+  onNext, serviceAccount, setServiceAccount, collections, setCollections,
 }: {
-  onNext: (connStr: string) => void;
-  connStr: string;
-  setConnStr: (v: string) => void;
+  onNext: (serviceAccount: string, collections: string) => void;
+  serviceAccount: string;
+  setServiceAccount: (v: string) => void;
+  collections: string;
+  setCollections: (v: string) => void;
 }) {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const isPoolerWarning = result && !result.success && result.message.includes('Session Pooler');
+  const [fileError, setFileError] = useState('');
 
   async function handleTest() {
     setTesting(true);
     setResult(null);
-    const r = await testDatabaseConnection(connStr);
+    const r = await testDatabaseConnection(serviceAccount);
     setResult(r);
     setTesting(false);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      setServiceAccount(text);
+      setResult(null);
+      setFileError('');
+    };
+    reader.onerror = () => {
+      setFileError('Failed to read key file.');
+    };
+    reader.readAsText(file);
   }
 
   return (
@@ -124,39 +94,48 @@ function Step1({
         <h1 className="step-title" style={{ marginBottom: 0 }}>Connect your database</h1>
       </div>
       <p className="step-subtitle">
-        We connect with a read-only role — StackGuard never writes to your data.
+        Upload or paste your Firebase service account key to establish a secure connection.
       </p>
 
       <div className="step-body">
-        {/* SQL instructions */}
-        <div>
-          <label className="form-label" style={{ marginBottom: 8 }}>
-            Step 1 of 2 — Create a read-only user in Supabase (run all 5 lines)
-          </label>
-          <SqlBlock />
-        </div>
-
-        {/* Connection string */}
+        {/* Service Account key */}
         <div className="form-group">
-          <label className="form-label">
-            Step 2 of 2 — Paste the Session Pooler connection string
-          </label>
-          <input
-            id="db-connection-string"
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <label className="form-label" style={{ marginBottom: 0 }}>
+              Firebase Service Account key
+            </label>
+            <label className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, height: 'auto', border: '1px solid var(--border-subtle)' }}>
+              Upload JSON file
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+              />
+            </label>
+          </div>
+
+          {fileError && (
+            <div style={{ color: 'var(--accent-red)', fontSize: 12, marginBottom: 6 }}>{fileError}</div>
+          )}
+
+          <textarea
+            id="firebase-service-account-key"
             className="form-input"
-            type="password"
-            placeholder="postgresql://stackguard_backup:[password]@[project].pooler.supabase.com:6543/postgres"
-            value={connStr}
-            onChange={e => { setConnStr(e.target.value); setResult(null); }}
+            rows={5}
+            placeholder='{&#10;  "type": "service_account",&#10;  "project_id": "your-project-id",&#10;  "private_key": "-----BEGIN PRIVATE KEY-----\n..."&#10;}'
+            value={serviceAccount}
+            onChange={e => { setServiceAccount(e.target.value); setResult(null); }}
             autoComplete="off"
             spellCheck={false}
+            style={{ fontFamily: 'monospace', fontSize: 12.5, whiteSpace: 'pre', resize: 'vertical' }}
           />
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
             <Shield size={11} />
-            Use the <strong style={{ color: 'var(--text-secondary)' }}>Session Pooler</strong> connection (port 6543) for maximum compatibility — find it in Supabase → Settings → Database → Connection string.
+            <span>Generate this in Firebase Console → Project Settings → Service Accounts → Generate new private key.</span>
           </div>
 
-          {result && !result.success && !isPoolerWarning && (
+          {result && !result.success && (
             <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(248,97,79,0.04)', border: '1px solid rgba(248,97,79,0.15)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ fontSize: 13, color: 'var(--accent-red)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <AlertTriangle size={14} /> Connection Test Failed
@@ -164,27 +143,30 @@ function Step1({
               <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 {result.message}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 6, marginTop: 2 }}>
-                💡 <strong>Troubleshooting Tip:</strong> Please verify your database password is correct (replace <code>[password]</code> with your actual password), ensure you've executed the SQL script above in your Supabase editor, and double-check that you copied the <strong>Session Pooler</strong> URI (port 6543) from Supabase settings.
-              </div>
             </div>
           )}
         </div>
 
-        {/* Warning box shown when pooler detection fails */}
-        {isPoolerWarning && (
-          <div className="diagnostic-box">
-            <div className="diagnostic-box-icon"><AlertTriangle size={15} /></div>
-            <div>
-              <strong>IPv6 / Direct Connection Detected</strong><br />
-              Your connection string points to port 5432 (direct connection). Many cloud platforms and ISPs block direct IPv6 Postgres connections.<br /><br />
-              <strong>Fix:</strong> In your Supabase dashboard, go to <em>Settings → Database → Connection string</em> and copy the <strong>Session Pooler</strong> URI (port 6543, containing <code>pooler.supabase.com</code>).
-            </div>
+        {/* Collections */}
+        <div className="form-group" style={{ marginTop: 16 }}>
+          <label className="form-label" htmlFor="collections-to-back-up">
+            Which collections should we back up?
+          </label>
+          <input
+            id="collections-to-back-up"
+            className="form-input"
+            type="text"
+            placeholder="e.g. users, projects, logs (comma-separated)"
+            value={collections}
+            onChange={e => setCollections(e.target.value)}
+          />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+            Leave empty to back up all top-level collections.
           </div>
-        )}
+        </div>
 
-        {/* Result */}
-        <div className="flex items-center justify-between">
+        {/* Result & Testing */}
+        <div className="flex items-center justify-between" style={{ marginTop: 12 }}>
           <div>
             {result && result.success && (
               <div className="connection-result success">
@@ -197,7 +179,7 @@ function Step1({
             id="test-db-connection-btn"
             className="btn btn-ghost"
             onClick={handleTest}
-            disabled={testing || !connStr.trim()}
+            disabled={testing || !serviceAccount.trim()}
           >
             {testing
               ? <><Loader2 size={14} style={{ animation: 'spin 0.7s linear infinite' }} /> Testing…</>
@@ -212,7 +194,7 @@ function Step1({
           <button
             id="step1-continue-btn"
             className="btn btn-dark"
-            onClick={() => onNext(connStr)}
+            onClick={() => onNext(serviceAccount, collections)}
             disabled={!result?.success}
           >
             Continue <ArrowRight size={15} />
@@ -490,14 +472,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [activating, setActivating] = useState(false);
 
   // State carried through steps
-  const [connStr, setConnStr] = useState('');
+  const [serviceAccount, setServiceAccount] = useState('');
+  const [collections, setCollections] = useState('');
   const [storageType, setStorageType] = useState<StorageType>('r2');
   const [storageCreds, setStorageCreds] = useState<Pipeline['storage_credentials']>({
     access_key: '', secret_key: '', bucket: '', endpoint: '',
   });
 
-  function handleStep1Next(cs: string) {
-    setConnStr(cs);
+  function handleStep1Next(sa: string, cols: string) {
+    setServiceAccount(sa);
+    setCollections(cols);
     setStep(2);
   }
 
@@ -515,8 +499,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       const pipeline = await savePipeline({
         name: `${storageType === 'r2' ? 'R2' : 'S3'} Backup (${data.schedule})`,
         user_id: user.uid,
-        database_type: 'postgres',
-        db_config: { connection_string: connStr },
+        database_type: 'firestore',
+        firebase_service_account_encrypted: serviceAccount,
+        collections: collections ? collections.split(',').map(s => s.trim()).filter(Boolean) : null,
         storage_type: storageType,
         storage_credentials: storageCreds,
         schedule: data.schedule,
@@ -531,7 +516,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       await seedMockRuns(pipeline.id);
       
       // Reset onboarding local state
-      setConnStr('');
+      setServiceAccount('');
+      setCollections('');
       setStorageCreds({ access_key: '', secret_key: '', bucket: '', endpoint: '' });
       setStorageType('r2');
 
@@ -553,8 +539,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <Step1
             key="step1"
             onNext={handleStep1Next}
-            connStr={connStr}
-            setConnStr={setConnStr}
+            serviceAccount={serviceAccount}
+            setServiceAccount={setServiceAccount}
+            collections={collections}
+            setCollections={setCollections}
           />
         )}
         {step === 2 && (

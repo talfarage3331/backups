@@ -42,8 +42,11 @@ function PipelineFormModal({
 
   // Form states
   const [name, setName] = useState(pipeline?.name || '');
-  const [connStr, setConnStr] = useState(
-    (pipeline?.db_config as Record<string,string> | undefined)?.connection_string || ''
+  const [firebaseServiceAccount, setFirebaseServiceAccount] = useState(
+    pipeline?.firebase_service_account_encrypted || ''
+  );
+  const [collections, setCollections] = useState(
+    pipeline?.collections ? pipeline.collections.join(', ') : ''
   );
   const [storageType, setStorageType] = useState<StorageType>(pipeline?.storage_type || 'r2');
   const [accessKey, setAccessKey] = useState(pipeline?.storage_credentials?.access_key || '');
@@ -63,13 +66,30 @@ function PipelineFormModal({
   const [storageResult, setStorageResult] = useState<{ success: boolean; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fileError, setFileError] = useState('');
 
   async function handleTestDb() {
     setTestingDb(true);
     setDbResult(null);
-    const r = await testDatabaseConnection(connStr);
+    const r = await testDatabaseConnection(firebaseServiceAccount);
     setDbResult(r);
     setTestingDb(false);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      setFirebaseServiceAccount(text);
+      setDbResult(null);
+      setFileError('');
+    };
+    reader.onerror = () => {
+      setFileError('Failed to read key file.');
+    };
+    reader.readAsText(file);
   }
 
   async function handleTestStorage() {
@@ -85,10 +105,8 @@ function PipelineFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError('Please enter a pipeline name.'); return; }
-    if (!connStr.trim()) { setError('Please provide a database connection string.'); return; }
+    if (!firebaseServiceAccount.trim()) { setError('Please provide a Firebase Service Account key.'); return; }
     if (!accessKey || !secretKey || !bucket || !endpoint) { setError('Please complete all storage credentials.'); return; }
-
-    const parsedDbConfig: Record<string, unknown> = { connection_string: connStr };
 
     setError('');
     setSaving(true);
@@ -98,8 +116,9 @@ function PipelineFormModal({
         id: pipeline?.id,
         name,
         user_id: userId,
-        database_type: 'postgres',
-        db_config: parsedDbConfig,
+        database_type: 'firestore',
+        firebase_service_account_encrypted: firebaseServiceAccount,
+        collections: collections ? collections.split(',').map(s => s.trim()).filter(Boolean) : null,
         storage_type: storageType,
         storage_credentials: { access_key: accessKey, secret_key: secretKey, bucket, endpoint },
         schedule,
@@ -155,19 +174,53 @@ function PipelineFormModal({
 
           {/* Database Setup */}
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>1. Database Source (Postgres / Supabase)</h3>
-            <div className="form-group">
-              <label className="form-label">Session Pooler Connection String</label>
-              <input
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>1. Database Source (Firebase / Firestore)</h3>
+            
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Firebase Service Account key</label>
+                <label className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, height: 'auto', border: '1px solid var(--border-subtle)' }}>
+                  Upload JSON
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+
+              {fileError && (
+                <div style={{ color: 'var(--accent-red)', fontSize: 12, marginBottom: 6 }}>{fileError}</div>
+              )}
+
+              <textarea
                 className="form-input"
-                type="password"
-                placeholder="postgresql://stackguard_backup:[pass]@[project].pooler.supabase.com:6543/postgres"
-                value={connStr}
-                onChange={e => { setConnStr(e.target.value); setDbResult(null); }}
+                rows={4}
+                placeholder='{&#10;  "type": "service_account",&#10;  "project_id": "your-project-id",&#10;  "private_key": "-----BEGIN PRIVATE KEY-----\n..."&#10;}'
+                value={firebaseServiceAccount}
+                onChange={e => { setFirebaseServiceAccount(e.target.value); setDbResult(null); }}
                 autoComplete="off"
                 spellCheck={false}
+                style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre', resize: 'vertical' }}
               />
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>Use the Session Pooler URI from Supabase → Settings → Database (port 6543).</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+                Generate this in Firebase Console → Project Settings → Service Accounts → Generate new private key.
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="form-label">Which collections should we back up?</label>
+              <input
+                className="form-input"
+                type="text"
+                placeholder="e.g. users, projects, logs (comma-separated)"
+                value={collections}
+                onChange={e => setCollections(e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+                Leave empty to back up all top-level collections.
+              </div>
             </div>
 
             <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
@@ -181,7 +234,7 @@ function PipelineFormModal({
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={handleTestDb}
-                disabled={testingDb || !connStr}
+                disabled={testingDb || !firebaseServiceAccount}
                 style={{ marginLeft: 'auto' }}
               >
                 {testingDb ? 'Testing...' : 'Test Connection'}
@@ -402,7 +455,7 @@ export default function Pipelines() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           {pipelines.map((pipeline) => {
             const isPipelineActive = pipeline.status === 'active';
-            const dbLabel = pipeline.database_type === 'postgres' ? 'PostgreSQL' : pipeline.database_type === 'firestore' ? 'Firestore' : 'Realtime DB';
+            const dbLabel = pipeline.database_type === 'firestore' ? 'Firestore' : 'Realtime DB';
             const storageLabel = pipeline.storage_type === 'r2' ? 'Cloudflare R2' : 'AWS S3';
             const scheduleSummary = pipeline.schedule === 'hourly' ? 'Hourly' : pipeline.schedule === '12h' ? 'Every 12 Hours' : 'Daily';
 

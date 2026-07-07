@@ -8,36 +8,47 @@ function delay(ms: number) {
 // ─── Connection validation ────────────────────────────────────────────────────
 
 export async function testDatabaseConnection(
-  connectionString: string
+  serviceAccountJson: string
 ): Promise<{ success: boolean; message: string }> {
   await delay(1200 + Math.random() * 600);
 
-  if (!connectionString.trim()) {
-    return { success: false, message: 'Connection string is empty.' };
+  if (!serviceAccountJson.trim()) {
+    return { success: false, message: 'Service account key is empty.' };
   }
 
-  const cleanString = connectionString.trim();
-
-  if (!cleanString.startsWith('postgresql://') && !cleanString.startsWith('postgres://')) {
+  try {
+    const parsed = JSON.parse(serviceAccountJson.trim());
+    if (parsed.type !== 'service_account') {
+      return {
+        success: false,
+        message: 'Invalid key type. Key type must be "service_account".'
+      };
+    }
+    if (!parsed.project_id) {
+      return {
+        success: false,
+        message: 'Missing "project_id" in the service account JSON.'
+      };
+    }
+    if (!parsed.private_key) {
+      return {
+        success: false,
+        message: 'Missing "private_key" in the service account JSON.'
+      };
+    }
+    if (!parsed.client_email) {
+      return {
+        success: false,
+        message: 'Missing "client_email" in the service account JSON.'
+      };
+    }
+    return { success: true, message: `Successfully connected to Firestore project "${parsed.project_id}"` };
+  } catch (err) {
     return {
       success: false,
-      message: 'Invalid protocol. Connection string must start with "postgresql://" or "postgres://".'
+      message: 'Failed to parse JSON. Please verify that the pasted text is a valid service account JSON key.'
     };
   }
-
-  // Detect direct connection instead of Session Pooler
-  const isSupabase = cleanString.includes('supabase');
-  const isDirectPort = cleanString.includes(':5432');
-  const isMissingPooler = !cleanString.includes('pooler');
-
-  if (isSupabase && (isDirectPort || isMissingPooler)) {
-    return {
-      success: false,
-      message: 'Connection failed: Supabase direct connection detected on port 5432. Many serverless environments and local ISPs block IPv6 direct database routes. We recommend using a Session Pooler connection string (port 6543 or containing *.pooler.supabase.com) to establish a stable IPv4 tunnel.'
-    };
-  }
-
-  return { success: true, message: 'Connection successful' };
 }
 
 export async function testStorageConnection(credentials: {
@@ -93,8 +104,8 @@ export async function runBackupSimulation(
     });
   };
 
-  await addLog('info',  'Connecting to database...',                            2000);
-  await addLog('info',  'Fetching schema and exporting tables...',              2000);
+  await addLog('info',  'Connecting to Firestore database...',                  2000);
+  await addLog('info',  'Exporting collections...',                             2000);
   await addLog('info',  'Compressing backup archive (tar.gz)...',             2000);
   await addLog('info',  'Connecting to Cloudflare R2 storage target...',      2000);
 

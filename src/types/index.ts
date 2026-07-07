@@ -1,4 +1,4 @@
-export type DatabaseType = 'postgres' | 'firestore' | 'rtdb';
+export type DatabaseType = 'firestore' | 'rtdb';
 export type StorageType = 'r2' | 's3';
 export type ScheduleType = 'hourly' | '12h' | 'daily';
 export type RestoreCheckFrequency = 'weekly' | 'monthly' | 'off';
@@ -11,7 +11,8 @@ export interface Pipeline {
   name?: string;
   user_id: string;
   database_type: DatabaseType;
-  db_config: Record<string, unknown>;
+  firebase_service_account_encrypted: string;
+  collections: string[] | null;
   storage_type: StorageType;
   storage_credentials: {
     access_key: string;

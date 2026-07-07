@@ -46,11 +46,12 @@ function StepTimeline({ step }: { step: number }) {
 
 // ─── SQL copy block ───────────────────────────────────────────────────────────
 
-const SQL_SNIPPET = `-- Run these 3 lines in your Supabase SQL Editor
+const SQL_SNIPPET = `-- Run these 5 lines in your Supabase SQL Editor
 CREATE ROLE stackguard_backup WITH LOGIN PASSWORD 'choose-a-strong-password';
 GRANT CONNECT ON DATABASE postgres TO stackguard_backup;
 GRANT USAGE ON SCHEMA public TO stackguard_backup;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO stackguard_backup;`;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO stackguard_backup;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO stackguard_backup;`;
 
 function SqlBlock() {
   const [copied, setCopied] = useState(false);
@@ -74,11 +75,12 @@ function SqlBlock() {
           </button>
         </div>
         <div className="sql-block-body">
-          <span className="sql-comment">{'-- Run these 3 lines in your Supabase SQL Editor\n'}</span>
+          <span className="sql-comment">{'-- Run these 5 lines in your Supabase SQL Editor\n'}</span>
           <span><span className="sql-keyword">CREATE ROLE</span> stackguard_backup <span className="sql-keyword">WITH LOGIN PASSWORD</span> <span className="sql-string">'choose-a-strong-password'</span>;<br /></span>
           <span><span className="sql-keyword">GRANT CONNECT ON DATABASE</span> postgres <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
           <span><span className="sql-keyword">GRANT USAGE ON SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
-          <span><span className="sql-keyword">GRANT SELECT ON ALL TABLES IN SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;</span>
+          <span><span className="sql-keyword">GRANT SELECT ON ALL TABLES IN SCHEMA</span> public <span className="sql-keyword">TO</span> stackguard_backup;<br /></span>
+          <span><span className="sql-keyword">ALTER DEFAULT PRIVILEGES IN SCHEMA</span> public <span className="sql-keyword">GRANT SELECT ON TABLES TO</span> stackguard_backup;</span>
         </div>
       </div>
       {showToast && (
@@ -129,7 +131,7 @@ function Step1({
         {/* SQL instructions */}
         <div>
           <label className="form-label" style={{ marginBottom: 8 }}>
-            Step 1 of 2 — Create a read-only user in Supabase
+            Step 1 of 2 — Create a read-only user in Supabase (run all 5 lines)
           </label>
           <SqlBlock />
         </div>
@@ -153,6 +155,20 @@ function Step1({
             <Shield size={11} />
             Use the <strong style={{ color: 'var(--text-secondary)' }}>Session Pooler</strong> connection (port 6543) for maximum compatibility — find it in Supabase → Settings → Database → Connection string.
           </div>
+
+          {result && !result.success && !isPoolerWarning && (
+            <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(248,97,79,0.04)', border: '1px solid rgba(248,97,79,0.15)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 13, color: 'var(--accent-red)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={14} /> Connection Test Failed
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {result.message}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 6, marginTop: 2 }}>
+                💡 <strong>Troubleshooting Tip:</strong> Please verify your database password is correct (replace <code>[password]</code> with your actual password), ensure you've executed the SQL script above in your Supabase editor, and double-check that you copied the <strong>Session Pooler</strong> URI (port 6543) from Supabase settings.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Warning box shown when pooler detection fails */}
@@ -170,9 +186,9 @@ function Step1({
         {/* Result */}
         <div className="flex items-center justify-between">
           <div>
-            {result && !isPoolerWarning && (
-              <div className={`connection-result ${result.success ? 'success' : 'error'}`}>
-                {result.success ? <CheckCircle size={17} /> : <XCircle size={17} />}
+            {result && result.success && (
+              <div className="connection-result success">
+                <CheckCircle size={17} />
                 {result.message}
               </div>
             )}

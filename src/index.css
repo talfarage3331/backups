@@ -848,12 +848,14 @@ button {
 .onboarding-page {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   align-items: center;
-  justify-content: center;
   background: var(--bg-base);
   background-image:
     radial-gradient(ellipse 60% 50% at 50% -10%, rgba(79,126,248,0.08) 0%, transparent 70%);
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
 }
 
 .onboarding-card {
@@ -862,9 +864,28 @@ button {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  padding: var(--space-10) var(--space-10) var(--space-8);
+  padding: var(--space-8) var(--space-8) var(--space-6);
   box-shadow: var(--shadow-lg);
   animation: fadeSlideUp 0.35s ease;
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px) {
+  .onboarding-page {
+    padding: var(--space-4) var(--space-2);
+  }
+  .onboarding-card {
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-4);
+  }
+}
+
+@media (max-height: 800px) {
+  .onboarding-card {
+    padding: var(--space-6) var(--space-6) var(--space-5);
+  }
 }
 
 /* Progress bar */

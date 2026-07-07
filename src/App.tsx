@@ -48,7 +48,7 @@ function AppShell() {
     return unsubscribe;
   }, [user]);
 
-  // 3. Listen for global toast notifications
+  // 3. Listen for global toast notifications and navigation events
   useEffect(() => {
     function handleShowToast(e: Event) {
       const customEvent = e as CustomEvent<string>;
@@ -60,8 +60,16 @@ function AppShell() {
       }, 3000);
     }
 
+    function handleNavigatePipelines() {
+      setPage('pipelines');
+    }
+
     window.addEventListener('show-toast', handleShowToast);
-    return () => window.removeEventListener('show-toast', handleShowToast);
+    window.addEventListener('navigate-pipelines', handleNavigatePipelines);
+    return () => {
+      window.removeEventListener('show-toast', handleShowToast);
+      window.removeEventListener('navigate-pipelines', handleNavigatePipelines);
+    };
   }, []);
 
   const activeCount = pipelines.filter(p => p.status === 'active').length;

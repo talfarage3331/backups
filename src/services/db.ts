@@ -1,9 +1,10 @@
 import type { Pipeline, Run, RunStatus, UserSettings, LogEntry } from '../types';
-import { db } from './firebase';
+import { db, functions } from './firebase';
 import {
   collection, doc, setDoc, getDocs, deleteDoc, updateDoc, getDoc,
   query, where, onSnapshot, arrayUnion,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -26,11 +27,9 @@ export async function getRuns(pipelineId: string): Promise<Run[]> {
 export async function savePipeline(
   pipeline: Omit<Pipeline, 'id'> & { id?: string }
 ): Promise<Pipeline> {
-  const id = pipeline.id || generateId();
-  const name = pipeline.name || `Backup Pipeline (${pipeline.database_type === 'firestore' ? 'Firestore' : 'RTDB'})`;
-  const data: Pipeline = { ...pipeline, id, name } as Pipeline;
-  await setDoc(doc(collection(db, 'pipelines'), id), data, { merge: true });
-  return data;
+  const saveSecurely = httpsCallable(functions, 'savePipelineSecurely');
+  const result = await saveSecurely(pipeline);
+  return result.data as Pipeline;
 }
 
 export async function saveRun(run: Omit<Run, 'id'> & { id?: string }): Promise<Run> {

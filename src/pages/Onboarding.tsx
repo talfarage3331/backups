@@ -513,7 +513,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         status: 'active',
       });
 
-      await seedMockRuns(pipeline.id);
+      await seedMockRuns(pipeline.id, user.uid);
       
       // Reset onboarding local state
       setServiceAccount('');

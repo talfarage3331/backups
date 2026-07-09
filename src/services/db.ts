@@ -124,7 +124,7 @@ export function subscribeToPipelines(
   });
 }
 
-export async function seedMockRuns(pipelineId: string): Promise<void> {
+export async function seedMockRuns(pipelineId: string, userId: string): Promise<void> {
   const existing = await getRuns(pipelineId);
   if (existing.length > 0) return;
 
@@ -159,37 +159,37 @@ export async function seedMockRuns(pipelineId: string): Promise<void> {
 
   const entries: Omit<Run, 'id'>[] = [
     {
-      pipelineId, type: 'backup', status: 'completed',
+      pipelineId, userId, type: 'backup', status: 'completed',
       startedAt:  new Date(now - day * 0.5).toISOString(),
       endedAt:    new Date(now - day * 0.5 + 45000).toISOString(),
       storageUsedBytes: 1_289_748_480, logs: completedLogs,
     },
     {
-      pipelineId, type: 'restore_check', status: 'completed',
+      pipelineId, userId, type: 'restore_check', status: 'completed',
       startedAt:  new Date(now - day * 2).toISOString(),
       endedAt:    new Date(now - day * 2 + 120000).toISOString(),
       storageUsedBytes: 1_289_748_480, logs: restoreLogs,
     },
     {
-      pipelineId, type: 'backup', status: 'completed',
+      pipelineId, userId, type: 'backup', status: 'completed',
       startedAt:  new Date(now - day * 3).toISOString(),
       endedAt:    new Date(now - day * 3 + 38000).toISOString(),
       storageUsedBytes: 1_245_982_720, logs: completedLogs,
     },
     {
-      pipelineId, type: 'backup', status: 'failed',
+      pipelineId, userId, type: 'backup', status: 'failed',
       startedAt:  new Date(now - day * 5).toISOString(),
       endedAt:    new Date(now - day * 5 + 9000).toISOString(),
       storageUsedBytes: 0, logs: failedLogs,
     },
     {
-      pipelineId, type: 'backup', status: 'completed',
+      pipelineId, userId, type: 'backup', status: 'completed',
       startedAt:  new Date(now - day * 6).toISOString(),
       endedAt:    new Date(now - day * 6 + 41000).toISOString(),
       storageUsedBytes: 1_198_000_000, logs: completedLogs,
     },
     {
-      pipelineId, type: 'backup', status: 'completed',
+      pipelineId, userId, type: 'backup', status: 'completed',
       startedAt:  new Date(now - day * 10).toISOString(),
       endedAt:    new Date(now - day * 10 + 40000).toISOString(),
       storageUsedBytes: 1_100_000_000, logs: completedLogs,

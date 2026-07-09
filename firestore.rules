@@ -3,48 +3,106 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── pipelines ───────────────────────────────────────────────────────────
-    // A user may only read or write their own pipeline documents.
-    // Even though sensitive fields are encrypted, this rule provides
-    // defense-in-depth so that no other authenticated user can ever
-    // see or overwrite a pipeline row they do not own.
-    // Cloud Functions (Admin SDK) bypass these rules entirely, which is
-    // intentional: only savePipelineSecurely and executeBackup should
-    // read/write pipeline data on the server side.
-    match /pipelines/{pipelineId} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == resource.data.user_id;
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
 
-      // Allow create when the document does not yet exist:
-      // the incoming user_id must equal the requester's uid.
-      allow create: if request.auth != null
-                    && request.auth.uid == request.resource.data.user_id;
+    // True when the request carries a verified Firebase Auth token.
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
     }
 
-    // ─── runs ─────────────────────────────────────────────────────────────────
-    // A user may read their own run documents. Writes are performed
-    // exclusively by Cloud Functions (Admin SDK), never from the client.
+    // True when the authenticated user owns this pipeline document.
+    function ownsPipeline(pipelineData) {
+      return isAuthenticated() && request.auth.uid == pipelineData.user_id;
+    }
+
+    // The encrypted/server-only fields that a client must never write directly.
+    // These are set exclusively by the savePipelineSecurely Cloud Function
+    // (which runs under Admin SDK and bypasses these rules).
+    function touchesServerOnlyFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny([
+          'firebase_service_account_encrypted',
+          'storage_credentials'
+        ]);
+    }
+
+    // Same check for creates: client must not set those fields at all.
+    function createHasServerOnlyFields() {
+      return request.resource.data.keys()
+        .hasAny([
+          'firebase_service_account_encrypted',
+          'storage_credentials'
+        ]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // pipelines/{pipelineId}
+    // ═══════════════════════════════════════════════════════════════════════════
+    match /pipelines/{pipelineId} {
+
+      // READ — only the document owner may read their pipeline.
+      allow read: if ownsPipeline(resource.data);
+
+      // CREATE — denied from the client entirely.
+      // savePipelineSecurely (Admin SDK) handles all creates.
+      allow create: if false;
+
+      // UPDATE — the owner may update non-sensitive fields only.
+      // Any attempt to change firebase_service_account_encrypted or
+      // storage_credentials is rejected, even by the owner, because those
+      // fields must only be written by the Cloud Function after encryption.
+      allow update: if ownsPipeline(resource.data)
+                    && !touchesServerOnlyFields();
+
+      // DELETE — the owner may delete their own pipeline.
+      allow delete: if ownsPipeline(resource.data);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // runs/{runId}
+    // ═══════════════════════════════════════════════════════════════════════════
     match /runs/{runId} {
-      allow read: if request.auth != null
+
+      // READ — the owner of the run (verified via userId field on the document)
+      // may read their run. userId is written by the client on create and must
+      // match their auth uid.
+      allow read: if isAuthenticated()
                   && request.auth.uid == resource.data.userId;
 
-      // Clients may create a run document to trigger the backup worker,
-      // but the userId in the new document must match their own auth uid.
-      allow create: if request.auth != null
-                    && request.auth.uid == request.resource.data.userId;
+      // CREATE — a user may create a run document to trigger the backup worker,
+      // but ALL of the following must hold:
+      //   1. The userId on the new document must match their auth uid.
+      //   2. The status must be exactly 'running' (the worker checks for this).
+      //   3. The client may not pre-set server-only fields.
+      //   4. The run must reference a real pipeline owned by the same user.
+      allow create: if isAuthenticated()
+                    && request.auth.uid == request.resource.data.userId
+                    && request.resource.data.status == 'running'
+                    && !request.resource.data.keys().hasAny(['endedAt'])
+                    && get(/databases/$(database)/documents/pipelines/$(request.resource.data.pipelineId)).data.user_id == request.auth.uid;
 
-      // No client-side updates or deletes — only Admin SDK can do these.
-      allow update, delete: if false;
+      // UPDATE — denied from the client.
+      // executeBackup (Admin SDK) owns all run status/log updates.
+      allow update: if false;
+
+      // DELETE — the run owner may delete their own runs (e.g. cleanup).
+      allow delete: if isAuthenticated()
+                    && request.auth.uid == resource.data.userId;
     }
 
-    // ─── users ────────────────────────────────────────────────────────────────
-    // Each user can only read/write their own profile document.
-    match /users/{userId} {
-      allow read, write: if request.auth != null
+    // ═══════════════════════════════════════════════════════════════════════════
+    // users/{userId}/settings/global  (and other subcollections)
+    // ═══════════════════════════════════════════════════════════════════════════
+    match /users/{userId}/{document=**} {
+      allow read, write: if isAuthenticated()
                          && request.auth.uid == userId;
     }
 
-    // ─── default: deny everything else ───────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DEFAULT — deny everything not explicitly covered above.
+    // ═══════════════════════════════════════════════════════════════════════════
     match /{document=**} {
       allow read, write: if false;
     }

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   CheckCircle, XCircle, Shield, HardDrive, Play, Download,
   Loader2, Terminal as TerminalIcon, Database, Cloud, Settings,
@@ -323,6 +323,7 @@ export default function Dashboard() {
     const startedAt = new Date().toISOString();
     const newRun = await saveRun({
       pipelineId: pipeline.id,
+      userId: user?.uid ?? '',
       type: "backup",
       status: "running",
       startedAt,

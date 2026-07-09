@@ -132,7 +132,7 @@ function PipelineFormModal({
 
       // If creating a brand new pipeline, seed initial logs
       if (!isEdit) {
-        await seedMockRuns(saved.id);
+        await seedMockRuns(saved.id, userId);
       }
 
       onSave();

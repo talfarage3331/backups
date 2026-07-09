@@ -38,6 +38,7 @@ export interface LogEntry {
 export interface Run {
   id: string;
   pipelineId: string;
+  userId: string;
   type: RunType;
   status: RunStatus;
   startedAt: string;

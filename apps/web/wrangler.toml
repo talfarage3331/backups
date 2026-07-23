@@ -1,0 +1,11 @@
+# Cloudflare Pages configuration
+# https://developers.cloudflare.com/pages/platform/wrangler-configuration/
+
+name = "envshield-web"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "envshield-web"
+
+[env.preview]
+name = "envshield-web-preview"

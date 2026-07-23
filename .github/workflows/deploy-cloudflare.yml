@@ -1,0 +1,84 @@
+name: Deploy — Cloudflare Pages (Web Dashboard)
+
+on:
+  push:
+    branches: ['main']           # Auto-deploy to production on every main push
+  pull_request:
+    branches: ['main']           # Deploy preview for every PR targeting main
+  workflow_dispatch:             # Allow manual trigger from GitHub Actions UI
+
+permissions:
+  contents: read
+  deployments: write             # Required by Cloudflare Pages action
+  pull-requests: write           # Required to post preview URL comment on PR
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Build the web dashboard
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build Web Dashboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web dashboard
+        run: pnpm --filter web build
+        env:
+          # Firebase config — set these in GitHub repo secrets
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Deploy to Cloudflare Pages
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=envshield-web --commit-dirty=true
+          # On main branch → production deployment
+          # On PRs → preview deployment with auto-generated URL

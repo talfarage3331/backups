@@ -14,10 +14,10 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: Build the web dashboard
+  # Single job: Build then Deploy in the same runner so paths are guaranteed
   # ─────────────────────────────────────────────────────────────────────────────
-  build:
-    name: Build Web Dashboard
+  build-and-deploy:
+    name: Build & Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +41,7 @@ jobs:
       - name: Build web dashboard
         run: pnpm --filter web build
         env:
-          # Firebase config — set these in GitHub repo secrets
+          # Firebase config — add these in GitHub → Settings → Secrets → Actions
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
@@ -49,36 +49,16 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: apps/web/dist
-          retention-days: 1
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Deploy to Cloudflare Pages
-  # ─────────────────────────────────────────────────────────────────────────────
-  deploy:
-    name: Deploy to Cloudflare Pages
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: apps/web/dist
+      - name: Verify dist output exists
+        run: |
+          echo "Checking build output..."
+          ls -la apps/web/dist/
+          echo "✅ dist directory confirmed at: $GITHUB_WORKSPACE/apps/web/dist"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/web/dist --project-name=envshield-web --commit-dirty=true
-          # On main branch → production deployment
-          # On PRs → preview deployment with auto-generated URL
+          # Use absolute path via GITHUB_WORKSPACE to eliminate any path ambiguity
+          command: pages deploy ${{ github.workspace }}/apps/web/dist --project-name=envshield-web --commit-dirty=true

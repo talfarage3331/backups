@@ -1,0 +1,35 @@
+{
+  "name": "@envshield/core",
+  "version": "0.0.1",
+  "description": "Core engines for EnvShield: introspection, subsetting, masking, and PII detection",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/envshield.git",
+    "directory": "packages/core"
+  },
+  "keywords": ["pii", "masking", "data-compliance", "envshield", "gdpr", "soc2", "stream"],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.5",
+    "typescript": "~6.0.2",
+    "vitest": "^3.0.0"
+  }
+}

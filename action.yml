@@ -1,0 +1,81 @@
+name: 'EnvShield CI/CD Sync & Ephemeral DB'
+description: 'Automates database subsetting, masking, and Ephemeral DB branching with Neon on Pull Requests'
+author: 'EnvShield'
+
+inputs:
+  envshield-api-key:
+    description: 'EnvShield project API key'
+    required: false
+  source-db-url:
+    description: 'PostgreSQL connection URL of the source database'
+    required: true
+  target-db-url:
+    description: 'PostgreSQL connection URL of the target database (ignored if using Neon Ephemeral DB)'
+    required: false
+  subset-percentage:
+    description: 'Percentage of rows to sample (e.g., 5)'
+    required: false
+    default: '5'
+  control-plane-url:
+    description: 'EnvShield Control Plane base URL'
+    required: false
+    default: 'http://localhost:3001'
+  neon-api-key:
+    description: 'Neon Console API Key (required for Ephemeral DB)'
+    required: false
+  neon-project-id:
+    description: 'Neon Project ID (required for Ephemeral DB)'
+    required: false
+  github-token:
+    description: 'GitHub GITHUB_TOKEN to comment on the PR (required for Ephemeral DB)'
+    required: false
+  neon-parent-branch:
+    description: 'Neon branch to create the PR branch from'
+    required: false
+    default: 'main'
+  show-plain-credentials:
+    description: 'Whether to post the plain password in the PR comment'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 10
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+      working-directory: ${{ github.action_path }}
+
+    - name: Build packages
+      shell: bash
+      run: pnpm build
+      working-directory: ${{ github.action_path }}
+
+    - name: Run EnvShield Action Handler
+      shell: bash
+      run: |
+        node ${{ github.action_path }}/packages/cli/dist/action-runner.js
+      env:
+        INPUT_ENVSHIELD_API_KEY: ${{ inputs.envshield-api-key }}
+        INPUT_SOURCE_DB_URL: ${{ inputs.source-db-url }}
+        INPUT_TARGET_DB_URL: ${{ inputs.target-db-url }}
+        INPUT_SUBSET_PERCENTAGE: ${{ inputs.subset-percentage }}
+        INPUT_CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
+        INPUT_NEON_API_KEY: ${{ inputs.neon-api-key }}
+        INPUT_NEON_PROJECT_ID: ${{ inputs.neon-project-id }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_NEON_PARENT_BRANCH: ${{ inputs.neon-parent-branch }}
+        INPUT_SHOW_PLAIN_CREDENTIALS: ${{ inputs.show-plain-credentials }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}

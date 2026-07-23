@@ -1,0 +1,40 @@
+{
+  "name": "@envshield/cli",
+  "version": "0.0.1",
+  "description": "Compliance-driven environment sync & auto-masking CLI",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "envshield": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/envshield.git",
+    "directory": "packages/cli"
+  },
+  "keywords": ["pii", "masking", "data-compliance", "envshield", "cli", "gdpr", "soc2"],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@envshield/core": "workspace:*",
+    "commander": "^12.1.0",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.5",
+    "typescript": "~6.0.2",
+    "vitest": "^3.0.0"
+  }
+}

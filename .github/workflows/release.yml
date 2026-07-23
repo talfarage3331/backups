@@ -1,0 +1,192 @@
+name: Release — Publish to NPM & GitHub Marketplace
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'          # Triggers on version tags: v0.1.0, v1.0.0, etc.
+
+  workflow_dispatch:       # Allow manual triggering for dry-run testing
+    inputs:
+      dry_run:
+        description: 'Dry run (skip actual publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write          # Create GitHub Releases
+  packages: write          # Publish GitHub Packages (optional)
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Quality gate — Lint, Build, and Test all packages
+  # ─────────────────────────────────────────────────────────────────────────────
+  quality-gate:
+    name: Quality Gate (Lint → Build → Test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Run all tests (zero-leakage integration + unit)
+        run: pnpm test
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Publish @envshield/core to NPM
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish-core:
+    name: Publish @envshield/core to NPM
+    needs: quality-gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with NPM registry auth
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @envshield/core
+        run: pnpm --filter @envshield/core build
+
+      - name: Publish @envshield/core (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: pnpm --filter @envshield/core publish --dry-run --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @envshield/core to NPM
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: pnpm --filter @envshield/core publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Publish @envshield/cli to NPM
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish-cli:
+    name: Publish @envshield/cli to NPM
+    needs: publish-core   # Core must be published first since CLI depends on it
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with NPM registry auth
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @envshield/core and @envshield/cli
+        run: pnpm build
+
+      - name: Publish @envshield/cli (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: pnpm --filter @envshield/cli publish --dry-run --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @envshield/cli to NPM
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: pnpm --filter @envshield/cli publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: Create GitHub Release with change notes
+  # ─────────────────────────────────────────────────────────────────────────────
+  create-github-release:
+    name: Create GitHub Release
+    needs: publish-cli
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: "EnvShield ${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## 🛡️ EnvShield ${{ steps.version.outputs.VERSION }}
+
+            ### What's in this release
+
+            **Packages published to NPM:**
+            - [`@envshield/core`](https://www.npmjs.com/package/@envshield/core) — Core masking, subsetting, PII detection engines
+            - [`@envshield/cli`](https://www.npmjs.com/package/@envshield/cli) — CLI wrapper (`envshield scan`, `envshield sync`)
+
+            **GitHub Action:**
+            - The reusable GitHub Action is available at this tag via `your-org/envshield@${{ steps.version.outputs.VERSION }}`
+
+            ### Install CLI
+            ```bash
+            npm install -g @envshield/cli
+            envshield --help
+            ```
+
+            ### Use GitHub Action
+            ```yaml
+            - uses: your-org/envshield@${{ steps.version.outputs.VERSION }}
+              with:
+                source-db-url: ${{ secrets.SOURCE_DB_URL }}
+                neon-api-key: ${{ secrets.NEON_API_KEY }}
+                neon-project-id: ${{ secrets.NEON_PROJECT_ID }}
+                github-token: ${{ secrets.GITHUB_TOKEN }}
+            ```
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

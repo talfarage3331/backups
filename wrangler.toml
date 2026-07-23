@@ -1,0 +1,10 @@
+# Cloudflare Pages — Root Configuration
+# This file MUST be at the repo root for Cloudflare Pages to detect it.
+# https://developers.cloudflare.com/pages/configuration/wrangler-configuration/
+
+name = "envshield-web"
+compatibility_date = "2024-01-01"
+
+# Tell Cloudflare Pages where the Vite build output lives.
+# The build runs from the repo root (pnpm build → turbo → apps/web/dist)
+pages_build_output_dir = "apps/web/dist"

@@ -155,3 +155,43 @@
   1. Publish `@envshield/cli` to NPM registry.
   2. Deploy `apps/control-plane` to production serverless infrastructure.
   3. Deploy `apps/web` dashboard to Cloudflare Pages / Vercel.
+
+---
+
+## Phase 7: Production Hardening, Cleanup & Deployment (Tasks 7.1 - 7.4)
+
+### [x] Task 7.1: Resolve Linter Warnings
+* **Goal:** Clean up the codebase to have zero warnings/errors.
+* **Action Steps:**
+  1. Fix unused imports in `apps/web/src/pages/Dashboard.tsx` and `apps/web/src/pages/Onboarding.tsx`.
+  2. Fix React Hook `useEffect` dependency warnings in `apps/web/src/pages/Dashboard.tsx`.
+  3. Resolve caught `err` warnings in `apps/web/src/services/simulator.ts`.
+
+### [~] Task 7.2: Live Database & Integration Testing *(blocked — needs live DB credentials)*
+* **Goal:** Test against live Postgres instances.
+* **Action Steps:**
+  1. Verify CLI `sync` throughput and data integrity against live remote database servers.
+  2. Validate Neon branching lifecycle in actual integration scenarios.
+* **Note:** Docker and PostgreSQL are not installed locally. Set `TEST_DATABASE_URL` in `packages/cli/.env` and provide `NEON_API_KEY` + `NEON_PROJECT_ID` to unblock.
+
+### [x] Task 7.3: Package & Deployment Automation
+* **Goal:** Automate NPM release and app deployments.
+* **Action Steps:**
+  1. Configure packages for publishing to NPM registry — `publishConfig` added to both `@envshield/core` and `@envshield/cli`.
+  2. CI workflow (`.github/workflows/ci.yml`) added — runs lint, build, and tests on every push/PR.
+  3. Release workflow (`.github/workflows/release.yml`) already publishes to NPM and creates a GitHub Release on version tags.
+  4. Deploy Control Plane backend and Web frontend to production hosting — instructions added to README.
+
+### [x] Task 7.4: End-User Documentation
+* **Goal:** Author setup and user-onboarding guides.
+* **Action Steps:**
+  1. Replaced stale Vite template `README.md` with full EnvShield documentation including:
+     - Quick Start (install, scan, sync)
+     - GitHub Actions integration guide (ephemeral PR DBs + standard push sync)
+     - Web Dashboard overview
+     - Control Plane setup and API reference
+     - Monorepo structure map
+     - Configuration reference (CLI flags, masking strategies)
+     - Compliance & Security section
+     - Troubleshooting guide
+

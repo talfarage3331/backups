@@ -1,0 +1,45 @@
+name: CI — Lint, Build & Test
+
+on:
+  push:
+    branches: ['main', 'develop', 'feat/**', 'fix/**']
+  pull_request:
+    branches: ['main', 'develop']
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job: Run the full quality gate on every push/PR
+  # ─────────────────────────────────────────────────────────────────────────────
+  ci:
+    name: CI Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint all packages
+        run: pnpm lint
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Run all tests
+        run: pnpm test

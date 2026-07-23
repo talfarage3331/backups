@@ -32,7 +32,7 @@ export async function testDatabaseConnection(
     // Attempt parse
     new URL(connectionString.trim());
     return { success: true, message: 'Successfully established connection to source database.' };
-  } catch (err) {
+  } catch {
     return {
       success: false,
       message: 'Invalid database URL structure. Please check host, port, credentials, and format.'
@@ -63,7 +63,7 @@ export async function testTargetConnection(
   try {
     new URL(connectionString.trim());
     return { success: true, message: 'Target database connection verified successfully.' };
-  } catch (err) {
+  } catch {
     return {
       success: false,
       message: 'Invalid target URL structure. Please check host and connection credentials.'

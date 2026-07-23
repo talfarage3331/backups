@@ -5,7 +5,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { testDatabaseConnection, testTargetConnection } from '../services/simulator';
 import { savePipeline, seedMockRuns } from '../services/db';
-import type { Pipeline, ScheduleType, DatabaseEngine } from '../types';
+import type { ScheduleType, DatabaseEngine } from '../types';
 
 interface OnboardingProps {
   onComplete: () => void;

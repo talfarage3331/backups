@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  CheckCircle, XCircle, Shield, Play, Download,
-  Loader2, Terminal as TerminalIcon, Database, Cloud, Settings,
-  Clock, LayoutDashboard, AlertCircle, Cpu, ShieldAlert
+  CheckCircle, XCircle, Shield, Play,
+  Loader2, Terminal as TerminalIcon, Database, Settings,
+  Clock, LayoutDashboard, Cpu, ShieldAlert
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToPipelines, subscribeToRuns, saveRun } from "../services/db";
@@ -316,7 +316,7 @@ export default function Dashboard() {
     if (!selectedPipelineId) return;
     const runs = runsMap[selectedPipelineId] ?? [];
     setSelectedRunId(runs[0]?.id ?? null);
-  }, [selectedPipelineId]);
+  }, [selectedPipelineId, runsMap]);
 
   const handleRunNow = useCallback(async (pipeline: Pipeline) => {
     if (runningMap[pipeline.id]) return;
